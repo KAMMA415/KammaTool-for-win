@@ -1,0 +1,85 @@
+name: Publish Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Run ID of a successful Build Windows packages workflow
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: windows-release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Verify and publish both Windows ZIPs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          set -euo pipefail
+          [[ "$BUILD_RUN_ID" =~ ^[0-9]+$ ]]
+          workflow_id=$(gh api "repos/$GH_REPO/actions/workflows/build-windows.yml" --jq .id)
+          run_json=$(gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID")
+          commit=$(jq -er --argjson workflow "$workflow_id" \
+            'select(.workflow_id == $workflow and .conclusion == "success" and .event == "workflow_dispatch") | .head_sha' \
+            <<< "$run_json")
+          [[ "$commit" =~ ^[0-9a-f]{40}$ ]]
+
+          version=$(gh api "repos/$GH_REPO/contents/version.py?ref=$commit" --jq .content \
+            | base64 --decode | sed -nE 's/^APP_VERSION = "([^"]+)"$/\1/p')
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$ ]]
+          tag="v$version"
+          matching_tags=$(gh api "repos/$GH_REPO/git/matching-refs/tags/$tag")
+          jq -e --arg ref "refs/tags/$tag" 'all(.[]; .ref != $ref)' <<< "$matching_tags" >/dev/null
+
+          artifacts=$(gh api "repos/$GH_REPO/actions/runs/$BUILD_RUN_ID/artifacts")
+          mkdir -p dist
+          packages=()
+          for arch in x64 arm64; do
+            name="KammaTool-$tag-windows-$arch-portable.zip"
+            artifact=$(jq -ec --arg name "$name" \
+              '[.artifacts[] | select(.name == $name and .expired == false)] |
+               if length == 1 then .[0] else error("Expected one artifact for " + $name) end' \
+              <<< "$artifacts")
+            artifact_id=$(jq -er '.id' <<< "$artifact")
+            digest=$(jq -er '.digest | sub("^sha256:"; "")' <<< "$artifact")
+            [[ "$artifact_id" =~ ^[0-9]+$ && "$digest" =~ ^[0-9a-f]{64}$ ]]
+            package="dist/$name"
+            gh api "repos/$GH_REPO/actions/artifacts/$artifact_id/zip" > "$package"
+            printf '%s  %s\n' "$digest" "$package" | sha256sum --check
+            unzip -tq "$package"
+            packages+=("$package")
+          done
+
+          gh api "repos/$GH_REPO/contents/CHANGELOG.md?ref=$commit" --jq .content \
+            | base64 --decode \
+            | awk -v heading="## $tag" '$0 == heading { found = 1; next } found && /^## / { exit } found' \
+            > release-notes.md
+          grep -q '[^[:space:]]' release-notes.md
+          cat >> release-notes.md <<'NOTES'
+
+          ## 下载与运行
+
+          - **Windows x64** 适用于 Intel 或 AMD 的 64 位 Windows 电脑。
+          - **Windows ARM64** 适用于 Snapdragon 等 ARM 处理器的 Windows 电脑。
+
+          在 Assets 下载对应架构的 ZIP，完整解压后双击 `KammaTool.exe`。Office 转 PDF 和部分表格功能需要本机安装对应的 Microsoft Office 桌面应用。
+          NOTES
+
+          label=(--latest)
+          if [[ "$version" == *-* ]]; then
+            label=(--prerelease)
+          fi
+          gh release create "$tag" "${packages[@]}" --repo "$GH_REPO" --target "$commit" \
+            --title "KammaTool for win $tag" --notes-file release-notes.md "${label[@]}"
