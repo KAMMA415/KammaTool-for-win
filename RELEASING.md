@@ -53,10 +53,9 @@ python -m venv .venv
 
 ## 4. 发布到 Releases
 
-1. 打开仓库的 **Releases → Draft a new release**。
-2. 创建 `v2.1.0` 标签并指向完成打包和验收的提交。发布新版本时使用对应版本号。
-3. 填写标题 `KammaTool for win v2.1.0`，按功能、修复和兼容性填写变更说明。
-4. 将两个架构的便携 ZIP 添加到 Assets。测试版勾选 **This is a pre-release**。稳定版使用 **Set as the latest release**。
-5. 发布后从仓库首页打开“下载最新版”和“查看所有版本”，核对页面、附件与标签对应。
+1. 打开已通过验收的 **Build Windows packages** 运行详情，复制页面地址末尾的运行编号。
+2. 进入 **Actions → Publish Windows release → Run workflow**，选择 `main`，把运行编号填入 `build_run_id` 并运行。
+3. 发布流程核对两个 ZIP 的完整性及 SHA-256。它从构建时的 `version.py` 读取版本号，从 `CHANGELOG.md` 读取该版本说明，并将标签指向对应的构建提交。
+4. 流程成功后打开 **Releases**，核对版本号、更新说明和两个下载包。稳定版会标为最新版，带 `alpha`、`beta` 或 `rc` 的版本会标为预发布。
 
 GitHub 会附带源码压缩包。普通用户在 Assets 中下载对应架构的便携 ZIP。
