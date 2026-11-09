@@ -52,8 +52,11 @@ def main():
             command.extend(("--add-data", f"{ROOT / asset}:."))
         command.append(str(ROOT / "main.py"))
         subprocess.run(command, cwd=ROOT, check=True)
-        if not (bundle_dir / "KammaTool.exe").is_file():
+        executable = bundle_dir / "KammaTool.exe"
+        if not executable.is_file():
             raise SystemExit("PyInstaller did not produce KammaTool.exe.")
+        subprocess.run([str(executable), "--smoke-test"], cwd=bundle_dir, check=True, timeout=45)
+        print(f"Packaged startup and file rename passed ({architecture}).")
 
         temporary_archive = build_dir / archive.name
         with ZipFile(temporary_archive, "w", compression=ZIP_DEFLATED) as output:
