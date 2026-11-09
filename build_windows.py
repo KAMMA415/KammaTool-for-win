@@ -6,6 +6,7 @@ import sys
 import sysconfig
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from textwrap import dedent
 from zipfile import ZIP_DEFLATED, ZipFile
 
 from version import APP_VERSION
@@ -40,10 +41,21 @@ def main():
     ) as temporary_dir:
         build_dir = Path(temporary_dir)
         bundle_dir = build_dir / "bundle" / "KammaTool"
+        diagnostics_hook = build_dir / "smoke_diagnostics.py"
+        diagnostics_hook.write_text(dedent("""\
+            import faulthandler
+            import sys
+
+            if sys.argv[1:] == ["--smoke-test"]:
+                sys.stdout = sys.stderr = open("smoke-test.log", "w", encoding="utf-8", buffering=1)
+                print("Starting packaged Python runtime.")
+                faulthandler.dump_traceback_later(25, file=sys.stderr)
+            """), encoding="utf-8")
         command = [
             sys.executable, "-m", "PyInstaller", "--windowed", "--onedir",
             "--name", "KammaTool", "--icon", str(ROOT / ASSETS[0]),
             "--collect-data", "ttkbootstrap",
+            "--runtime-hook", str(diagnostics_hook),
             "--distpath", str(bundle_dir.parent),
             "--workpath", str(build_dir / "work"),
             "--specpath", str(build_dir),
@@ -55,7 +67,15 @@ def main():
         executable = bundle_dir / "KammaTool.exe"
         if not executable.is_file():
             raise SystemExit("PyInstaller did not produce KammaTool.exe.")
-        subprocess.run([str(executable), "--smoke-test"], cwd=bundle_dir, check=True, timeout=45)
+        smoke_log = bundle_dir / "smoke-test.log"
+        try:
+            subprocess.run([str(executable), "--smoke-test"], cwd=bundle_dir, check=True, timeout=45)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            if smoke_log.is_file():
+                print(smoke_log.read_text(encoding="utf-8", errors="replace"))
+            raise
+        finally:
+            smoke_log.unlink(missing_ok=True)
         print(f"Packaged startup and file rename passed ({architecture}).")
 
         temporary_archive = build_dir / archive.name
