@@ -1,0 +1,69 @@
+"""Build an architecture-specific portable Windows ZIP."""
+
+import re
+import subprocess
+import sys
+import sysconfig
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from zipfile import ZIP_DEFLATED, ZipFile
+
+from version import APP_VERSION
+
+ROOT = Path(__file__).resolve().parent
+ASSETS = (
+    "Dongdong tool 2.ico",
+    "icon_rename.png",
+    "icon_pdf.png",
+    "icon_merge.png",
+    "icon_organize.png",
+)
+
+
+def main():
+    architecture = {"win-amd64": "x64", "win-arm64": "arm64"}.get(sysconfig.get_platform())
+    if architecture is None:
+        raise SystemExit("Use an x64 or ARM64 Windows Python interpreter.")
+    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?", APP_VERSION):
+        raise SystemExit("Set a release version such as 2.1.0 or 2.2.0-beta.1 in version.py.")
+
+    build_root = (ROOT / "build").resolve()
+    dist_dir = (ROOT / "dist").resolve()
+    if build_root.parent != ROOT or dist_dir.parent != ROOT:
+        raise SystemExit("The build and dist directories must be inside the project.")
+    build_root.mkdir(exist_ok=True)
+    dist_dir.mkdir(exist_ok=True)
+    archive = dist_dir / f"KammaTool-v{APP_VERSION}-windows-{architecture}-portable.zip"
+
+    with TemporaryDirectory(
+        prefix=f"windows-{architecture}-", dir=build_root, ignore_cleanup_errors=True
+    ) as temporary_dir:
+        build_dir = Path(temporary_dir)
+        bundle_dir = build_dir / "bundle" / "KammaTool"
+        command = [
+            sys.executable, "-m", "PyInstaller", "--windowed", "--onedir",
+            "--name", "KammaTool", "--icon", ASSETS[0],
+            "--collect-data", "ttkbootstrap",
+            "--distpath", str(bundle_dir.parent),
+            "--workpath", str(build_dir / "work"),
+            "--specpath", str(build_dir),
+        ]
+        for asset in ASSETS:
+            command.extend(("--add-data", f"{asset}:."))
+        command.append("main.py")
+        subprocess.run(command, cwd=ROOT, check=True)
+        if not (bundle_dir / "KammaTool.exe").is_file():
+            raise SystemExit("PyInstaller did not produce KammaTool.exe.")
+
+        temporary_archive = build_dir / archive.name
+        with ZipFile(temporary_archive, "w", compression=ZIP_DEFLATED) as output:
+            for file in sorted(bundle_dir.rglob("*")):
+                if file.is_file():
+                    output.write(file, file.relative_to(bundle_dir.parent))
+            output.write(ROOT / "USAGE.md", "KammaTool/USAGE.md")
+        temporary_archive.replace(archive)
+    print(archive)
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,17 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+/config.json
+/config.json.*
+.env
+.env.*
+*.lnk
+*.log
+~$*
+/build/
+/dist/
+*.spec
+.agents/
+.codex/
+.aws/

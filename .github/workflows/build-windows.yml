@@ -1,0 +1,39 @@
+name: Build Windows packages
+
+on: workflow_dispatch
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            architecture: x64
+          - runner: windows-11-arm
+            architecture: arm64
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          architecture: ${{ matrix.architecture }}
+      - name: Install dependencies
+        run: |
+          python -m pip install -r requirements-build.txt
+          python -m pip check
+      - name: Check source imports
+        run: python -B -c "import main"
+      - name: Build portable ZIP
+        run: python build_windows.py
+      - uses: actions/upload-artifact@v7
+        with:
+          path: dist/KammaTool-*-windows-${{ matrix.architecture }}-portable.zip
+          archive: false
+          if-no-files-found: error
