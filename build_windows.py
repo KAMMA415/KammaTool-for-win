@@ -42,15 +42,15 @@ def main():
         bundle_dir = build_dir / "bundle" / "KammaTool"
         command = [
             sys.executable, "-m", "PyInstaller", "--windowed", "--onedir",
-            "--name", "KammaTool", "--icon", ASSETS[0],
+            "--name", "KammaTool", "--icon", str(ROOT / ASSETS[0]),
             "--collect-data", "ttkbootstrap",
             "--distpath", str(bundle_dir.parent),
             "--workpath", str(build_dir / "work"),
             "--specpath", str(build_dir),
         ]
         for asset in ASSETS:
-            command.extend(("--add-data", f"{asset}:."))
-        command.append("main.py")
+            command.extend(("--add-data", f"{ROOT / asset}:."))
+        command.append(str(ROOT / "main.py"))
         subprocess.run(command, cwd=ROOT, check=True)
         if not (bundle_dir / "KammaTool.exe").is_file():
             raise SystemExit("PyInstaller did not produce KammaTool.exe.")
