@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, simpledialog
+from tkinter import filedialog, messagebox, simpledialog
 from tkinter.constants import *
 import os
 import sys
@@ -9,6 +9,7 @@ import json
 import queue  # 引入线程安全队列
 import re
 from datetime import datetime
+import ttkbootstrap as ttk
 from PIL import Image, ImageTk
 
 # 导入各个处理器
